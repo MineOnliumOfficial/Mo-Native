@@ -1,0 +1,201 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: config
+data:
+  config.json: |
+    {
+    "$schema": "https://raw.githubusercontent.com/oliverw/miningcore/master/src/Miningcore/config.schema.json",
+    "logging": {
+        "level": "info",
+        "enableConsoleLog": true,
+        "enableConsoleColors": true,
+        "logFile": "",
+        "apiLogFile": "",
+        "logBaseDirectory": "",
+        "perPoolLogFile": false
+    },
+    "banning": {
+        "manager": "Integrated",
+        "banOnJunkReceive": false,
+        "banOnInvalidShares": false
+    },
+    "notifications": {
+        "enabled": false,
+        "email": {
+            "host": "smtp.example.com",
+            "port": 587,
+            "user": "user",
+            "password": "password",
+            "fromAddress": "info@yourpool.org",
+            "fromName": "pool support"
+        },
+        "admin": {
+            "enabled": false,
+            "emailAddress": "user@example.com",
+            "notifyBlockFound": true
+        }
+    },
+    "persistence": {
+        "postgres": {
+            "host": "miningcore-db-any",
+            "port": 5432,
+            "user": "miningcore",
+            "password": "password",
+            "database": "miningcore"
+        }
+    },
+    "paymentProcessing": {
+        "enabled": true,
+        "interval": 100,
+        "shareRecoveryFile": "recovered-shares.txt"
+    },
+    "api": {
+        "enabled": true,
+        "listenAddress": "*",
+        "port": 4000,
+        "metricsIpWhitelist": [],
+        "rateLimiting": {
+            "disabled": true,
+            "rules": [
+                {
+                    "Endpoint": "*",
+                    "Period": "1s",
+                    "Limit": 5
+                }
+            ],
+            "ipWhitelist": [
+                ""
+            ]
+        }
+    },
+    "clusterName": "MineOnlium",
+    "pools": [
+      {
+        "id": "MineOnlium",
+        "enabled": true,
+        "coin": "ethereum",
+        "address": "0x5bbfa5724260Cb175cB39b24802A04c3bfe72eb3",
+        "rewardRecipients": [
+          {
+            "type": "op",
+            "address": "0x5bbfa5724260Cb175cB39b24802A04c3bfe72eb3",
+            "percentage": 1.0
+          }
+        ],
+        "blockRefreshInterval": 120,
+        "clientConnectionTimeout": 600,
+        "banning": {
+          "enabled": true,
+          "time": 600,
+          "invalidPercent": 50,
+          "checkThreshold": 50
+        },
+        "ports": {
+          "4073": {
+            "name": "GPU-SMALL",
+            "listenAddress": "*",
+            "difficulty": 0.1,
+            "varDiff": {
+              "minDiff": 0.1,
+              "maxDiff": null,
+              "targetTime": 15,
+              "retargetTime": 90,
+              "variancePercent": 30
+            }
+          }
+        },
+        "chainTypeOverride": "Ethereum",
+        "dagDir": "/home/dag",
+        "daemons": [
+          {
+            "host": "_____UPDATEME_____",
+            "port": 8545,
+            "user": "",
+            "password": ""
+          }
+        ],
+        "paymentProcessing": {
+            "enabled": true,
+            "minimumPayment": 5,
+            "payoutScheme": "PPLNS",
+            "payoutSchemeConfig": {
+                "factor": 0.5
+            },
+            "gas": 21000,
+            "maxFeePerGas": 50000000000,
+            "keepUncles": false,
+            "keepTransactionFees": false
+        }
+      }
+    ]
+    }
+
+---
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mining-core
+  labels:
+    app: mining-core
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: mining-core
+  template:
+    metadata:
+      labels:
+        app: mining-core
+    spec:
+      containers:
+        - name: mining-core
+          image: tmjeff/miningcoremineonlium
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 4000
+            - containerPort: 4001
+            - containerPort: 4067
+            - containerPort: 4066
+            - containerPort: 4073
+          volumeMounts:
+            - name: config
+              mountPath: /app/
+              # subPath: config.json
+      volumes:
+        - name: config
+          configMap:
+            name: config
+
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: mining-core-loadbalancer
+spec:
+  type: LoadBalancer
+  selector:
+    app: mining-core
+  ports:
+    - protocol: TCP
+      port: 4073
+      targetPort: 4073
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: mining-core-loadbalancer-api-ddm
+spec:
+  type: LoadBalancer
+  selector:
+    app: mining-core
+  ports:
+    - protocol: TCP
+      port: 4000
+      targetPort: 4000
+
